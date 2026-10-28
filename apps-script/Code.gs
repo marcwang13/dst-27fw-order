@@ -30,7 +30,7 @@
  * Email 通知：每張新訂單／修改都會寄信到 NOTIFY_TO（多個收件人用逗號分隔，留空就不寄）
  */
 
-const NOTIFY_TO = 'marc_wang@emers.com';
+const NOTIFY_TO = 'marc_wang@emers.com,zero_wang@emers.com,zoe_chang@emers.com';
 
 const ORDER_HEAD = ['送出時間', '訂單編號', '經銷商／店名', '聯絡人', '電話', 'Email', '訂單備註', '款色數', '件數', '零售金額', '分店數', '分店', '狀態', '帳號 Email', '最後修改'];
 const LINE_HEAD = ['送出時間', '訂單編號', '經銷商／店名', '分店', '分頁', '月份', '款號', '色碼 SKU', '英文品名', '中文品名', '顏色', '尺寸', '數量', '台灣建議售價', '零售金額'];
@@ -185,11 +185,11 @@ function sheet_(ss, name, head) {
   let sh = ss.getSheetByName(name);
   if (!sh) {
     sh = ss.insertSheet(name);
-    sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#111111').setFontColor('#ffffff');
+    sh.getRange(1, 1, 1, head.length).setValues([head]).setFontWeight('bold').setBackground('#0a3f94').setFontColor('#ffffff');
     sh.setFrozenRows(1);
   } else if (sh.getLastColumn() < head.length) {
     const from = sh.getLastColumn() + 1;
-    sh.getRange(1, from, 1, head.length - from + 1).setValues([head.slice(from - 1)]).setFontWeight('bold').setBackground('#111111').setFontColor('#ffffff');
+    sh.getRange(1, from, 1, head.length - from + 1).setValues([head.slice(from - 1)]).setFontWeight('bold').setBackground('#0a3f94').setFontColor('#ffffff');
   }
   return sh;
 }
@@ -282,7 +282,7 @@ function writeOrderTab_(ss, log, oid, m, rows) {
     ['狀態', m.status || ''],
   ];
   sh.getRange(1, 1, info.length, 2).setValues(info);
-  sh.getRange(1, 1).setFontSize(14).setFontWeight('bold').setFontColor('#111111');
+  sh.getRange(1, 1).setFontSize(14).setFontWeight('bold').setFontColor('#0a3f94');
   sh.getRange(2, 1, info.length - 1, 1).setFontColor('#666666');
   sh.getRange(8, 2).setFontWeight('bold');
 
@@ -300,7 +300,7 @@ function writeOrderTab_(ss, log, oid, m, rows) {
 
   const all = [head].concat(body, [foot]);
   sh.getRange(top, 1, all.length, head.length).setValues(all);
-  sh.getRange(top, 1, 1, head.length).setFontWeight('bold').setBackground('#111111').setFontColor('#ffffff');
+  sh.getRange(top, 1, 1, head.length).setFontWeight('bold').setBackground('#0a3f94').setFontColor('#ffffff');
   sh.getRange(top + all.length - 1, 1, 1, head.length).setFontWeight('bold').setBackground('#f3e6e6');
   sh.getRange(top, 1, all.length, head.length).setBorder(true, true, true, true, true, true, '#dddddd', SpreadsheetApp.BorderStyle.SOLID);
   const firstSize = head.length - 3 - sizes.length + 1;
@@ -374,9 +374,9 @@ function orderHtml_(d, rows, title, intro, footer) {
   const list = Object.values(groups);
   const hasBranch = list.some(g => g.branch);
   const tr = list.map(g => `<tr>${hasBranch ? `<td>${esc(g.branch)}</td>` : ''}<td>${esc(g.style)}<br><span style="color:#888">${esc(g.sku)}</span></td><td>${esc(g.zh)}</td><td>${esc(g.color)}</td><td>${esc(g.sizes.join('  '))}</td><td style="text-align:right">${g.qty}</td><td style="text-align:right">${fmt(g.amt)}</td></tr>`).join('');
-  const th = s => `<th style="background:#111111;color:#fff;padding:6px 8px;text-align:left;font-weight:600">${s}</th>`;
+  const th = s => `<th style="background:#0a3f94;color:#fff;padding:6px 8px;text-align:left;font-weight:600">${s}</th>`;
   return `<div style="font-family:Arial,'Microsoft JhengHei',sans-serif;font-size:14px;color:#222">
-  <h2 style="color:#111111;margin:0 0 8px">DESCENTE 27FW ${esc(title)}</h2>
+  <h2 style="color:#0a3f94;margin:0 0 8px">DESCENTE 27FW ${esc(title)}</h2>
   ${intro ? `<p style="margin:0 0 12px">${intro}</p>` : ''}
   <table style="border-collapse:collapse;margin-bottom:12px">
   <tr><td style="color:#666;padding:2px 12px 2px 0">訂單編號</td><td><b>${esc(d.oid)}</b></td></tr>
@@ -397,7 +397,7 @@ function notify_(ss, d, rows, isEdit, kindOverride, att) {
   const fmt = n => Number(n || 0).toLocaleString('en-US');
   const kind = kindOverride || (isEdit ? '訂單修改' : '新訂單');
   const subject = `【DESCENTE 27FW ${kind}】${d.store || '（未填店名）'}｜${fmt(d.qty)} 件｜NT$${fmt(d.amount)}`;
-  const html = orderHtml_(d, rows, kind, '', `<p><a href="${ss.getUrl()}" style="color:#111111">開啟 Google 試算表看完整訂單</a></p>`);
+  const html = orderHtml_(d, rows, kind, '', `<p><a href="${ss.getUrl()}" style="color:#0a3f94">開啟 Google 試算表看完整訂單</a></p>`);
   const msg = { to: NOTIFY_TO, subject: subject, htmlBody: html, name: 'DESCENTE 27FW 線上訂貨' };
   if (att) msg.attachments = [att];
   MailApp.sendEmail(msg);
@@ -446,7 +446,7 @@ function otpSend_(email) {
   c.put('otptry:' + em, '0', 600);
   c.put('otpwait:' + em, '1', 60);
   MailApp.sendEmail({ to: em, subject: `DESCENTE 27FW 線上訂貨 登入驗證碼：${code}`, name: 'DESCENTE 台灣',
-    htmlBody: `<div style="font-family:Arial,'Microsoft JhengHei',sans-serif;font-size:14px;color:#222"><h2 style="color:#111111;margin:0 0 8px">DESCENTE 27FW 線上訂貨</h2><p>您的登入驗證碼是：</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px;margin:8px 0">${code}</p><p style="color:#666">10 分鐘內有效。如果不是您本人要登入，請忽略這封信。</p></div>` });
+    htmlBody: `<div style="font-family:Arial,'Microsoft JhengHei',sans-serif;font-size:14px;color:#222"><h2 style="color:#0a3f94;margin:0 0 8px">DESCENTE 27FW 線上訂貨</h2><p>您的登入驗證碼是：</p><p style="font-size:28px;font-weight:bold;letter-spacing:6px;margin:8px 0">${code}</p><p style="color:#666">10 分鐘內有效。如果不是您本人要登入，請忽略這封信。</p></div>` });
   return 'ok';
 }
 function otpVerify_(email, code) {
