@@ -164,7 +164,12 @@ main{padding-block:12px}
 .price small{font-family:var(--f-body);font-size:11px;color:var(--muted);margin-right:4px}
 .sizes{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:420px}
 .sz{display:flex;flex-direction:column;align-items:center;gap:2px}
-.sz span{font-family:var(--f-disp);font-weight:600;font-size:12px;letter-spacing:.04em;color:var(--muted)}
+.sz span{font-family:var(--f-disp);font-weight:600;font-size:12px;letter-spacing:.04em;color:var(--muted);text-align:center;line-height:1.15}
+.szn{display:block;font-family:var(--f-mono);font-weight:400;font-size:10px;letter-spacing:0;color:var(--muted);opacity:.85}
+.sz.na input,.mx input.na{background:repeating-linear-gradient(135deg,var(--sunk) 0 4px,var(--line) 4px 6px);border-color:var(--line);cursor:not-allowed}
+.sz.na span,.mx th.na span{opacity:.55}
+.sizes{align-items:flex-end}
+.szbr{flex-basis:100%;height:2px}
 .sz input{width:48px;height:36px;text-align:center;border:1.5px solid color-mix(in srgb,var(--acc) 35%,var(--line));border-radius:4px;background:var(--bg);font-family:var(--f-mono);font-size:14px;-moz-appearance:textfield}
 .sz input::-webkit-outer-spin-button,.sz input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .sz input.on{background:var(--acc-soft);border-color:var(--acc);color:var(--acc);font-weight:600}
@@ -321,7 +326,7 @@ tfoot td{font-weight:700;background:var(--sunk)}
       <input type="file" id="x-file" accept=".xlsx" hidden>
       <span class="xlhint" id="x-msg"></span>
     </div>
-    <p class="sznote"><b>尺寸對照</b>女 XS 80／S 85／M 90／L 95／XL 100／XXL 105 ・ 男 S 90／M 95／L 100／XL 105／2XL 110／3XL 115／4XL 120。每個顏色只列出有開的尺寸。</p>
+    <p class="sznote"><b>尺寸對照</b>女 XS 80／S 85／M 90／L 95／XL 100／XXL 105 ・ 男 S 90／M 95／L 100／XL 105／2XL 110／3XL 115／4XL 120。斜線灰格＝這個顏色沒開的尺寸。</p>
   </div>
   <div class="rail">
     <div class="wrap">
@@ -487,9 +492,9 @@ const SHARE={
 const SHARE_CAT={'短袖POLO衫':'POLO','短袖T恤':'T恤','中層／1/4拉鍊衫':'長袖1/4拉鍊','長袖POLO衫':'長袖POLO','長袖T恤':'長袖T恤','連帽衫':'長袖帽T','圓領衫':'長袖無領','針織衫':'長袖無領','外套':'上衣合計','背心':'上衣合計','長褲':'長褲（腰圍）','短褲':'長褲（腰圍）'};
 function shareFor(it){ if(!window.DST_SHARE_ON) return null; const k=SHARE_CAT[it.cat]; return k?{k,m:SHARE[k]}:null; }
 function matrixHTML(it,sh){
-  const head=it.sizes.map(z=>{ const p=sh?sh.m[z]:null; return `<th><span>${esc(z)}</span>${sh?(p!=null?`<span class="pct" title="上季 ${esc(sh.k)} 尺寸銷售佔比"><i style="width:${Math.round(p*100)}%"></i><b>${Math.round(p*100)}%</b></span>`:'<span class="pct na">–</span>'):''}</th>`; }).join('');
-  const rows=S.br.map(b=>{ const m=(S.bq[b.id]||{})[it.id]||{}; let t=0; const cells=it.sizes.map(z=>{ const v=m[z]||''; t+=m[z]||0; return `<td><input class="${v?'on':''}" type="number" min="0" step="1" inputmode="numeric" id="q-${esc(it.id)}-${esc(z)}-${b.id}" data-sz="${esc(z)}" data-brq="${b.id}" value="${v}" aria-label="${esc(b.name+' '+it.en+' '+it.color+' '+z)} 數量"></td>`; }).join(''); return `<tr><th class="bn" title="${esc(b.name)}">${esc(b.name)}</th>${cells}<td class="bt" data-bt="${b.id}">${t||''}</td></tr>`; }).join('');
-  const colT=it.sizes.map(z=>{ let t=0; S.br.forEach(b=>{ t+=(((S.bq[b.id]||{})[it.id]||{})[z])||0; }); return `<td data-ct="${esc(z)}">${t||''}</td>`; }).join('');
+  const head=fullSizes(it).map(z=>{ const p=sh?sh.m[z]:null; return `<th class="${it.sizes.includes(z)?'':'na'}"><span>${SZL(z)}</span>${sh?(p!=null?`<span class="pct" title="上季 ${esc(sh.k)} 尺寸銷售佔比"><i style="width:${Math.round(p*100)}%"></i><b>${Math.round(p*100)}%</b></span>`:'<span class="pct na">–</span>'):''}</th>`; }).join('');
+  const rows=S.br.map(b=>{ const m=(S.bq[b.id]||{})[it.id]||{}; let t=0; const cells=fullSizes(it).map(z=>{ if(!it.sizes.includes(z)) return `<td><input class="na" disabled tabindex="-1" aria-label="無此尺寸"></td>`; const v=m[z]||''; t+=m[z]||0; return `<td><input class="${v?'on':''}" type="number" min="0" step="1" inputmode="numeric" id="q-${esc(it.id)}-${esc(z)}-${b.id}" data-sz="${esc(z)}" data-brq="${b.id}" value="${v}" aria-label="${esc(b.name+' '+it.en+' '+it.color+' '+z)} 數量"></td>`; }).join(''); return `<tr><th class="bn" title="${esc(b.name)}">${esc(b.name)}</th>${cells}<td class="bt" data-bt="${b.id}">${t||''}</td></tr>`; }).join('');
+  const colT=fullSizes(it).map(z=>{ let t=0; S.br.forEach(b=>{ t+=(((S.bq[b.id]||{})[it.id]||{})[z])||0; }); return `<td data-ct="${esc(z)}">${t||''}</td>`; }).join('');
   return `<div class="mx-wrap"><table class="mx"><thead><tr><th class="bn">分店</th>${head}<th>合計</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><th class="bn">合計</th>${colT}<td data-ctt>${itemQty(it.id)||''}</td></tr></tfoot></table></div>`;
 }
 function subHTML(it){ const tq=itemQty(it.id); if(!tq) return '&nbsp;'; let s=`${S.chain?'全部分店 ':'小計 '}<b>${tq}</b> 件 · <b>${fmt(tq*(it.price||0))}</b>`; return s; }
@@ -497,7 +502,7 @@ function itemHTML(it){
   const q=curQ()[it.id]||{}; const tq=itemQty(it.id);
   const open=S.open.has(it.id);
   const sh=shareFor(it);
-  const sizes = it.sizes.map(sz=>{ const v=q[sz]||''; const p=sh?sh.m[sz]:null; const pct=sh?(p!=null?`<span class="pct" title="上季 ${esc(sh.k)} 尺寸銷售佔比"><i style="width:${Math.round(p*100)}%"></i><b>${Math.round(p*100)}%</b></span>`:'<span class="pct na">–</span>'):''; return `<label class="sz"><span>${esc(sz)}</span><input class="${v?'on':''}" type="number" min="0" step="1" inputmode="numeric" id="q-${esc(it.id)}-${esc(sz)}" data-sz="${esc(sz)}" value="${v}" aria-label="${esc(it.en+' '+it.color+' '+sz)} 數量">${pct}</label>`; }).join('');
+  const sizes = fullSizes(it).map(sz=>{ if(!it.sizes.includes(sz)) return `<label class="sz na"><span>${SZL(sz)}</span><input disabled tabindex="-1" aria-label="${esc(sz)} 無此尺寸"></label>`; const v=q[sz]||''; const p=sh?sh.m[sz]:null; const pct=sh?(p!=null?`<span class="pct" title="上季 ${esc(sh.k)} 尺寸銷售佔比"><i style="width:${Math.round(p*100)}%"></i><b>${Math.round(p*100)}%</b></span>`:'<span class="pct na">–</span>'):''; return `<label class="sz"><span>${SZL(sz)}</span><input class="${v?'on':''}" type="number" min="0" step="1" inputmode="numeric" id="q-${esc(it.id)}-${esc(sz)}" data-sz="${esc(sz)}" value="${v}" aria-label="${esc(it.en+' '+it.color+' '+sz)} 數量">${pct}</label>`; }).join('').replace(/(<label class="sz[^"]*"><span>男S)/,'<span class="szbr"></span>$1');
   const sizesBlock = S.chain ? matrixHTML(it,sh) : `<div class="sizes">${sizes}</div>`;
   return `<article class="item ${tq?'has':''}" data-id="${esc(it.id)}">
     <div class="pic">${picHTML(it)}</div>
@@ -898,7 +903,10 @@ $('#admin').addEventListener('click',async e=>{
 // ---------- Excel order book ----------
 const SZ_ALL=['女XS','女S','女M','女L','女XL','女XXL','男S','男M','男L','男XL','男2XL','男3XL','男4XL'];
 const SIZE_COLS={'上衣 TOUGH':SZ_ALL,'羽絨':SZ_ALL,'GORE-TEX':SZ_ALL};
-function sheetSizes(sh){ const used=new Set(); ITEMS.filter(i=>i.sheet===sh).forEach(i=>i.sizes.forEach(z=>used.add(z))); const base=(SIZE_COLS[sh]||[]).filter(z=>used.has(z)); used.forEach(z=>{ if(!base.includes(z)) base.push(z); }); return base; }
+const SZ_NUM={'女XS':['80','65'],'女S':['85','70'],'女M':['90','75'],'女L':['92/95','80'],'女XL':['100','85'],'女XXL':['105','90'],'男S':['90','80'],'男M':['95','85'],'男L':['100','90'],'男XL':['105','95'],'男2XL':['110','100'],'男3XL':['115','105'],'男4XL':['120','110']};
+function SZL(z){ const n=SZ_NUM[z]; return esc(z)+(n?`<small class="szn">${n[0]}<br>${n[1]}</small>`:''); }
+function fullSizes(it){ const all=SIZE_COLS[it.sheet]||[]; const extra=it.sizes.filter(z=>!all.includes(z)); return [...all,...extra]; }
+function sheetSizes(sh){ if(SIZE_COLS[sh]) return SIZE_COLS[sh].slice(); const used=new Set(); ITEMS.filter(i=>i.sheet===sh).forEach(i=>i.sizes.forEach(z=>used.add(z))); const base=(SIZE_COLS[sh]||[]).filter(z=>used.has(z)); used.forEach(z=>{ if(!base.includes(z)) base.push(z); }); return base; }
 let ejP=null;
 function loadExcelJS(){ if(window.ExcelJS) return Promise.resolve(window.ExcelJS); if(!ejP) ejP=new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js'; s.onload=()=>res(window.ExcelJS); s.onerror=()=>{ ejP=null; rej(new Error('Excel 元件載入失敗，請檢查網路後再試一次。')); }; document.head.appendChild(s); }); return ejP; }
 const imgDims=src=>new Promise(r=>{ const im=new Image(); im.onload=()=>r([im.naturalWidth,im.naturalHeight]); im.onerror=()=>r([1,1]); im.src=src; });
