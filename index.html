@@ -1025,43 +1025,61 @@ function hoSizes(its){ const u=new Set(); its.forEach(i=>i.sizes.forEach(z=>u.ad
 function hoUnits(os){ const m=new Map(); const add=(label,lines)=>{ const u=m.get(label)||{label,q:{}}; for(const l of lines||[]){ if(!BY[l.k]||!l.qty) continue; const r=u.q[l.k]=u.q[l.k]||{}; r[l.size]=(r[l.size]||0)+l.qty; } m.set(label,u); };
   [...os].filter(o=>o.status!=='作廢').sort((a,b)=>String(a.submittedAt).localeCompare(String(b.submittedAt))).forEach(o=>{ const st=String(o.store||'未填店名').trim(); if(o.branches&&o.branches.length) o.branches.forEach(b=>add(`${st} ${String(b.name||'').trim()}`.trim(),b.lines)); else add(st,o.lines); });
   return [...m.values()]; }
-async function buildHandoff(os, disc){
+const HO_DISC=0.5;   // 折數統一 5 折，可在交單檔「總表」改
+async function buildHandoff(os){
   const EJ=await loadExcelJS(); const wb=new EJ.Workbook(); wb.creator=HO_BRAND; wb.created=new Date();
-  const units=hoUnits(os);
+  const units=hoUnits(os).filter(u=>Object.values(u.q).some(r=>Object.values(r).some(v=>v>0)));
+  const nOrd=os.filter(o=>o.status!=='作廢').length, stamp=fmtTime(new Date().toISOString());
   const F={name:'Arial',size:11};
   const fill=c=>({type:'pattern',pattern:'solid',fgColor:{argb:c}});
   const hair={style:'hair',color:{argb:'FF7F7F7F'}}, med={style:'medium',color:{argb:'FF000000'}};
   const bd={top:hair,left:hair,bottom:hair,right:hair};
-  const DARK='FF3F3F3F', PINK='FFFF33CC', YEL='FFFFFF00', GREY='FFA6A6A6', BLUE='FFDDEBF7', TOT='FFEBEBE8';
+  const DARK='FF3F3F3F', PINK='FFFF33CC', YEL='FFFFFF00', GREY='FFA6A6A6', BLUE='FFDDEBF7', LPINK='FFFFD9F2', LYEL='FFFFFBCC';
+  const NUM='#,##0;-#,##0;;@', L=colL;
+  const sum=wb.addWorksheet('總表',{views:[{showGridLines:false}]}); sum.pageSetup={orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0};
+  const DISC=`'總表'!$B$4`;
   const INFO=[['STYLE NO.',13,'style'],['STYLE & COLOR',21,'sku'],['COLOR',8,'cc'],['顏色',12,'color'],['CATEGORY',12,'cat'],['IMAGE',13,null],['STYLE NAME',34,'en'],['中文品名',22,'zh'],['GENDER',8,'gen'],['月份',7,'mon'],['TW-SRP\n(NTD)',11,'price']];
-  const imgCache={}; const out=[];
+  const imgCache={}; const out=[]; const refs={};   // refs[tab][label]=SRP TTL 儲存格
   for(const [dv,tab] of HO_DIVS){
+    refs[tab]={};
     const its=ITEMS.filter(i=>divOf(i)===dv).sort((a,b)=>SHEETS.indexOf(a.sheet)-SHEETS.indexOf(b.sheet));
     const ws=wb.addWorksheet(tab,{views:[{state:'frozen',xSplit:INFO.length,ySplit:7,showGridLines:false,zoomScale:85}]});
-    ws.pageSetup={orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.2,right:.2,top:.3,bottom:.3,header:.1,footer:.1}}; ws.getCell('A1').value=`${HO_BRAND} ORDER SHEET｜${tab}`; ws.getCell('A1').font={name:'Arial',size:20,bold:true};
-    ws.getCell('A3').value=`EMERS 交單彙整｜匯出 ${fmtTime(new Date().toISOString())}｜有效訂單 ${os.filter(o=>o.status!=='作廢').length} 張`; ws.getCell('A3').font={name:'Arial',size:12};
-    if(!its.length){ ws.getCell('A5').value='這一季沒有這個類別的商品。'; ws.getCell('A5').font={...F,color:{argb:'FF7F7F7F'}}; INFO.forEach(([h,w],k)=>ws.getColumn(k+1).width=w); out.push([tab,0,0]); continue; }
+    ws.pageSetup={orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.2,right:.2,top:.3,bottom:.3,header:.1,footer:.1}};
+    ws.getCell('A1').value=`${HO_BRAND} ORDER SHEET｜${tab}`; ws.getCell('A1').font={name:'Arial',size:20,bold:true};
+    ws.getCell('A2').value=`EMERS 交單彙整｜匯出 ${stamp}｜有效訂單 ${nOrd} 張｜WHL＝SRP × 折數（折數在「總表」B4）`; ws.getCell('A2').font={name:'Arial',size:12};
+    INFO.forEach(([h,w],k)=>ws.getColumn(k+1).width=w);
+    if(!its.length){ ws.getCell('A4').value='這一季沒有這個類別的商品。'; ws.getCell('A4').font={...F,color:{argb:'FF7F7F7F'}}; out.push([tab,0,0]); continue; }
     const sizes=hoSizes(its); const n=sizes.length;
     const us=units.filter(u=>its.some(i=>u.q[i.id]&&Object.values(u.q[i.id]).some(v=>v>0)));
-    const c0=INFO.length+1, cT=c0+n, cS=cT+1, cA=cS+1;              // WHSL 尺寸、TTL、TTL SRP、訂單金額
-    const blk=us.map((u,k)=>{ const s=cA+2+k*(n+2); return {u,s,t:s+n}; });  // 每店：尺寸＋TTL，中間空一欄
-    const R0=8, R1=R0+its.length-1, RT=R1+1, L=colL;
-    INFO.forEach(([h,w],k)=>ws.getColumn(k+1).width=w);
-    for(let c=c0;c<cT;c++) ws.getColumn(c).width=7; ws.getColumn(cT).width=10; ws.getColumn(cS).width=14; ws.getColumn(cA).width=14; ws.getColumn(cA+1).width=3;
-    blk.forEach(b=>{ for(let c=b.s;c<b.t;c++) ws.getColumn(c).width=7; ws.getColumn(b.t).width=9; ws.getColumn(b.t+1).width=3; });
-    // 第 5-6 列：折數、WHSL TTL、各店名
+    const c0=INFO.length+1, cT=c0+n, cS=cT+1, cA=cS+1, cP=INFO.length;
+    const blk=us.map((u,k)=>{ const s=cA+2+k*(n+2); return {u,s,t:s+n}; });
+    const R0=8, R1=R0+its.length-1, RT=R1+1;
+    for(let c=c0;c<cT;c++) ws.getColumn(c).width=7; ws.getColumn(cT).width=11; ws.getColumn(cS).width=14; ws.getColumn(cA).width=14; ws.getColumn(cA+1).width=3;
+    blk.forEach(b=>{ for(let c=b.s;c<b.t;c++) ws.getColumn(c).width=7; ws.getColumn(b.t).width=11; ws.getColumn(b.t+1).width=3; });
+    // 區塊上方：第 4 列 SRP TTL、第 5 列 WHL TTL、第 6 列名稱＋件數
+    const money=(s,t,row,label,formula,bg)=>{ const lc=ws.getCell(row,s); lc.value=label; lc.font={name:'Arial',size:12,bold:true}; lc.fill=fill(bg); lc.alignment={vertical:'middle'};
+      const from=Math.max(s+1,t-3); if(from<t) ws.mergeCells(row,from,row,t); const vc=ws.getCell(row,from<t?from:t); vc.value={formula}; vc.numFmt='#,##0'; vc.font={name:'Arial',size:12,bold:true}; vc.fill=fill(bg); vc.alignment={horizontal:'right',vertical:'middle'};
+      for(let c=s+1;c<from;c++) ws.getCell(row,c).fill=fill(bg); return `${L(from<t?from:t)}${row}`; };
+    const wSrp=money(c0,cT,4,'SRP TTL',`SUM(${L(cS)}${R0}:${L(cS)}${R1})`,LPINK);
+    money(c0,cT,5,'WHL TTL',`${wSrp}*${DISC}`,LPINK);
+    if(n>1) ws.mergeCells(6,c0,6,c0+Math.min(n,4)-1); const wt=ws.getCell(6,c0); wt.value='WHSL TTL'; wt.font={name:'Arial',size:22,bold:true}; wt.fill=fill(PINK); wt.alignment={vertical:'middle'};
+    for(let c=c0+Math.min(n,4);c<cT;c++) ws.getCell(6,c).fill=fill(PINK);
+    const tt=ws.getCell(6,cT); tt.value={formula:`SUM(${L(cT)}${R0}:${L(cT)}${R1})`}; tt.font={name:'Arial',size:18,bold:true}; tt.fill=fill(PINK); tt.numFmt='#,##0'; tt.alignment={horizontal:'center',vertical:'middle'};
     ws.getCell(5,cA).value='折數'; ws.getCell(5,cA).font={...F,bold:true}; ws.getCell(5,cA).alignment={horizontal:'center'};
-    const dc=ws.getCell(6,cA); dc.value=disc; dc.numFmt='0%'; dc.font={name:'Arial',size:12,bold:true}; dc.fill=fill('FFFFF2CC'); dc.alignment={horizontal:'center',vertical:'middle'}; dc.border={top:med,left:med,bottom:med,right:med};
-    if(n>1) ws.mergeCells(6,c0,6,c0+Math.min(n,4)-1); const wt=ws.getCell(6,c0); wt.value='WHSL TTL'; wt.alignment={vertical:'middle'}; wt.font={name:'Arial',size:22,bold:true}; wt.fill=fill(PINK);
-    const tt=ws.getCell(6,cT); tt.value={formula:`SUM(${L(cT)}${R0}:${L(cT)}${R1})`}; tt.font={name:'Arial',size:18,bold:true}; tt.fill=fill(PINK); tt.numFmt='#,##0'; tt.alignment={horizontal:'center'};
-    blk.forEach(b=>{ const c=ws.getCell(6,b.s); c.value=b.u.label; c.font={name:'Arial',size:16,bold:true}; c.fill=fill(YEL);
-      const t=ws.getCell(6,b.t); t.value={formula:`SUM(${L(b.t)}${R0}:${L(b.t)}${R1})`}; t.font={name:'Arial',size:14,bold:true}; t.numFmt='#,##0'; t.alignment={horizontal:'center'}; });
-    ws.getRow(6).height=34;
+    const dc=ws.getCell(6,cA); dc.value={formula:DISC}; dc.numFmt='0%'; dc.font={name:'Arial',size:12,bold:true}; dc.alignment={horizontal:'center',vertical:'middle'}; dc.border={top:med,left:med,bottom:med,right:med};
+    blk.forEach(b=>{
+      const srp=money(b.s,b.t,4,'SRP TTL',`SUMPRODUCT($${L(cP)}$${R0}:$${L(cP)}$${R1},${L(b.t)}${R0}:${L(b.t)}${R1})`,LYEL);
+      money(b.s,b.t,5,'WHL TTL',`${srp}*${DISC}`,LYEL);
+      refs[tab][b.u.label]=`'${tab}'!${srp}`;
+      const c=ws.getCell(6,b.s); c.value=b.u.label; c.font={name:'Arial',size:16,bold:true}; c.fill=fill(YEL); c.alignment={vertical:'middle'};
+      for(let x=b.s+1;x<b.t;x++) ws.getCell(6,x).fill=fill(YEL);
+      const t=ws.getCell(6,b.t); t.value={formula:`SUM(${L(b.t)}${R0}:${L(b.t)}${R1})`}; t.font={name:'Arial',size:14,bold:true}; t.fill=fill(YEL); t.numFmt='#,##0'; t.alignment={horizontal:'center',vertical:'middle'}; });
+    [4,5].forEach(r=>ws.getRow(r).height=22); ws.getRow(6).height=34;
     // 第 7 列：表頭
     const hr=ws.getRow(7); hr.height=40;
     const H=(c,v,first,last)=>{ const x=hr.getCell(c); x.value=v; x.font={name:'Arial',size:11,bold:true,color:{argb:'FFFFFFFF'}}; x.fill=fill(DARK); x.alignment={horizontal:'center',vertical:'middle',wrapText:true}; x.border={top:hair,bottom:hair,left:first?med:hair,right:last?med:hair}; };
     INFO.forEach(([h],k)=>H(k+1,h));
-    sizes.forEach((z,j)=>H(c0+j,isNaN(+z)?z:+z,j===0)); H(cT,'TTL',false,true); H(cS,'TTL SRP'); H(cA,'訂單金額');
+    sizes.forEach((z,j)=>H(c0+j,isNaN(+z)?z:+z,j===0)); H(cT,'TTL',false,true); H(cS,'SRP TTL'); H(cA,'WHL TTL');
     blk.forEach(b=>{ sizes.forEach((z,j)=>H(b.s+j,isNaN(+z)?z:+z,j===0)); H(b.t,'TTL',false,true); });
     // 商品列
     for(let k=0;k<its.length;k++){ const it=its[k], r=R0+k, row=ws.getRow(r); row.height=62;
@@ -1069,40 +1087,48 @@ async function buildHandoff(os, disc){
       sizes.forEach((z,j)=>{ const has=it.sizes.includes(z); const L0=j===0;
         const w=row.getCell(c0+j); w.value=blk.length?{formula:blk.map(b=>`${L(b.s+j)}${r}`).join('+')}:0; w.numFmt='0;-0;;@'; w.font={...F,bold:true}; w.alignment={horizontal:'center',vertical:'middle'}; w.fill=fill(has?BLUE:GREY); w.border={...bd,left:L0?med:hair};
         blk.forEach(b=>{ const c=row.getCell(b.s+j); const v=((b.u.q[it.id]||{})[z])||0; c.value=v||null; c.numFmt='0;-0;;@'; c.font={...F,bold:true}; c.alignment={horizontal:'center',vertical:'middle'}; c.border={...bd,left:L0?med:hair}; if(!has) c.fill=fill(GREY); }); });
-      const t=row.getCell(cT); t.value={formula:`SUM(${L(c0)}${r}:${L(cT-1)}${r})`}; t.numFmt='#,##0;-#,##0;;@'; t.font={name:'Arial',size:13,bold:true}; t.fill=fill(BLUE); t.alignment={horizontal:'center',vertical:'middle'}; t.border={...bd,right:med};
-      const s=row.getCell(cS); s.value={formula:`${L(INFO.length)}${r}*${L(cT)}${r}`}; s.numFmt='#,##0;-#,##0;;@'; s.font=F; s.border=bd; s.alignment={vertical:'middle'};
-      const a=row.getCell(cA); a.value={formula:`${L(cS)}${r}*$${L(cA)}$6`}; a.numFmt='#,##0;-#,##0;;@'; a.font=F; a.border=bd; a.alignment={vertical:'middle'};
-      blk.forEach(b=>{ const c=row.getCell(b.t); c.value={formula:`SUM(${L(b.s)}${r}:${L(b.t-1)}${r})`}; c.numFmt='#,##0;-#,##0;;@'; c.font={...F,bold:true}; c.border={...bd,right:med}; c.alignment={horizontal:'center',vertical:'middle'}; });
+      const t=row.getCell(cT); t.value={formula:`SUM(${L(c0)}${r}:${L(cT-1)}${r})`}; t.numFmt=NUM; t.font={name:'Arial',size:13,bold:true}; t.fill=fill(BLUE); t.alignment={horizontal:'center',vertical:'middle'}; t.border={...bd,right:med};
+      const s=row.getCell(cS); s.value={formula:`${L(cP)}${r}*${L(cT)}${r}`}; s.numFmt=NUM; s.font=F; s.border=bd; s.alignment={vertical:'middle'};
+      const a=row.getCell(cA); a.value={formula:`${L(cS)}${r}*${DISC}`}; a.numFmt=NUM; a.font=F; a.border=bd; a.alignment={vertical:'middle'};
+      blk.forEach(b=>{ const c=row.getCell(b.t); c.value={formula:`SUM(${L(b.s)}${r}:${L(b.t-1)}${r})`}; c.numFmt=NUM; c.font={...F,bold:true}; c.border={...bd,right:med}; c.alignment={horizontal:'center',vertical:'middle'}; });
       const h=it.doll||(it.photos||[])[0]; if(h&&IMG[h]){ if(!imgCache[h]) imgCache[h]={id:wb.addImage({base64:IMG[h],extension:'jpeg'}),dims:await imgDims(IMG[h])};
         const [iw,ih]=imgCache[h].dims, BW=96, BH=82, sc=Math.min((BW-6)/iw,(BH-6)/ih), W=Math.round(iw*sc), HH=Math.round(ih*sc);
         ws.addImage(imgCache[h].id,{tl:{col:5+(BW-W)/2/BW,row:r-1+(BH-HH)/2/BH},ext:{width:W,height:HH},editAs:'oneCell'}); }
     }
-    // 合計列
     const tr=ws.getRow(RT); tr.height=24; tr.getCell(1).value='TOTAL';
     const sumCols=[...sizes.map((_,j)=>c0+j),cT,cS,cA,...blk.flatMap(b=>[...sizes.map((_,j)=>b.s+j),b.t])];
-    sumCols.forEach(c=>{ tr.getCell(c).value={formula:`SUM(${L(c)}${R0}:${L(c)}${R1})`}; tr.getCell(c).numFmt='#,##0;-#,##0;;@'; tr.getCell(c).alignment={horizontal:'center'}; });
+    sumCols.forEach(c=>{ tr.getCell(c).value={formula:`SUM(${L(c)}${R0}:${L(c)}${R1})`}; tr.getCell(c).numFmt=NUM; tr.getCell(c).alignment={horizontal:'center'}; });
     for(let c=1;c<=Math.max(cA,...blk.map(b=>b.t));c++){ if(c===cA+1||blk.some(b=>c===b.t+1)) continue; const x=tr.getCell(c); x.font={name:'Arial',size:11,bold:true,color:{argb:'FFFFFFFF'}}; x.fill=fill(DARK); x.border={top:med,bottom:med}; }
     const q=its.reduce((t,i)=>t+us.reduce((s,u)=>s+Object.values(u.q[i.id]||{}).reduce((a,v)=>a+v,0),0),0);
     out.push([tab,q,us.length]);
   }
+  // 總表：BY 客戶
+  [22,18,18,18,20,20].forEach((w,k)=>sum.getColumn(k+1).width=w);
+  sum.getCell('A1').value=`${HO_BRAND} 交單總表`; sum.getCell('A1').font={name:'Arial',size:20,bold:true};
+  sum.getCell('A2').value=`EMERS 交單彙整｜匯出 ${stamp}｜有效訂單 ${nOrd} 張｜下單金額以台灣零售價（SRP）計`; sum.getCell('A2').font={name:'Arial',size:12};
+  const a4=sum.getCell('A4'), b4=sum.getCell('B4'); a4.value='折數'; a4.font={name:'Arial',size:12,bold:true}; a4.alignment={horizontal:'right'};
+  b4.value=HO_DISC; b4.numFmt='0%'; b4.font={name:'Arial',size:14,bold:true}; b4.fill=fill('FFFFF2CC'); b4.alignment={horizontal:'center'}; b4.border={top:med,left:med,bottom:med,right:med};
+  sum.getCell('C4').value='← 改這格，三個分頁的 WHL TTL 會一起更新'; sum.getCell('C4').font={...F,color:{argb:'FF7F7F7F'}};
+  const H0=6, heads=['客戶','APP 下單金額 (SRP)','ACC 下單金額 (SRP)','FTW 下單金額 (SRP)','客戶加總 (SRP)','× 折數 (WHL)'];
+  heads.forEach((h,k)=>{ const c=sum.getRow(H0).getCell(k+1); c.value=h; c.font={name:'Arial',size:11,bold:true,color:{argb:'FFFFFFFF'}}; c.fill=fill(DARK); c.alignment={horizontal:'center',vertical:'middle',wrapText:true}; c.border=bd; });
+  sum.getRow(H0).height=32;
+  let r=H0+1;
+  for(const u of units){ const row=sum.getRow(r); row.getCell(1).value=u.label;
+    HO_DIVS.forEach(([,tab],k)=>{ const ref=refs[tab][u.label]; row.getCell(2+k).value=ref?{formula:ref}:0; });
+    row.getCell(5).value={formula:`SUM(B${r}:D${r})`}; row.getCell(6).value={formula:`E${r}*$B$4`};
+    for(let c=1;c<=6;c++){ const x=row.getCell(c); x.font={...F,bold:c===1||c>=5}; x.border=bd; if(c>1) x.numFmt='#,##0'; if(c===6) x.fill=fill('FFFFF2CC'); } row.height=20; r++; }
+  const tr=sum.getRow(r); tr.getCell(1).value='整體加總';
+  for(let c=2;c<=6;c++){ tr.getCell(c).value={formula:`SUM(${L(c)}${H0+1}:${L(c)}${Math.max(H0+1,r-1)})`}; tr.getCell(c).numFmt='#,##0'; }
+  for(let c=1;c<=6;c++){ const x=tr.getCell(c); x.font={name:'Arial',size:12,bold:true,color:{argb:'FFFFFFFF'}}; x.fill=fill(DARK); x.border={top:med,bottom:med}; } tr.height=24;
+  sum.views=[{state:'frozen',ySplit:H0,showGridLines:false}];
   return {wb,out};
 }
 async function exportHandoff(os){
-  const disc=await askDisc(); if(disc==null) return null;
-  const {wb,out}=await buildHandoff(os,disc); const buf=await wb.xlsx.writeBuffer();
+  const {wb,out}=await buildHandoff(os); const buf=await wb.xlsx.writeBuffer();
   const d=new Date(), ymd=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
   const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([buf])); a.download=`${HO_FILE}_交單彙整_${ymd}.xlsx`; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },3000);
   return out;
 }
-function askDisc(){ return new Promise(res=>{ let last=''; try{ last=localStorage.getItem(HO_KEY)||''; }catch(e){}
-  const d=document.createElement('div'); d.className='scrim'; d.style.zIndex=60;
-  d.innerHTML=`<div class="panel" style="height:auto;margin:auto;max-width:420px;border-radius:8px"><h2>一鍵統整交單</h2>
-  <div style="font-size:13px;color:var(--muted)">把所有有效訂單（不含作廢）整理成品牌交單格式：APP(衣)、ACC(配)、FTW(鞋)三頁，每家店一個區塊，左邊是 WHSL TTL 總量。</div>
-  <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;margin-top:6px">折數（訂單金額 = 零售金額 × 折數，例如 48；不填就是 100%）<input id="ho-disc" inputmode="decimal" value="${esc(last)}" placeholder="例如 48" style="border:1.5px solid var(--line);border-radius:8px;padding:8px 10px;font-size:15px"></label>
-  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px"><button class="btn sm" data-x>取消</button><button class="btn sm pri" data-go>產生 Excel</button></div></div>`;
-  const done=v=>{ d.remove(); res(v); };
-  d.addEventListener('click',e=>{ if(e.target===d||e.target.closest('[data-x]')) done(null); if(e.target.closest('[data-go]')){ const raw=d.querySelector('#ho-disc').value.trim(); let v=raw===''?1:parseFloat(raw); if(isNaN(v)||v<=0){ d.querySelector('#ho-disc').focus(); return; } if(v>1) v=v/100; try{ localStorage.setItem(HO_KEY,raw); }catch(e){} done(v); } });
-  document.body.appendChild(d); setTimeout(()=>d.querySelector('#ho-disc').focus(),50); }); }
 function chooseExport(){ return new Promise(res=>{ const d=document.createElement('div'); d.className='scrim'; d.style.zIndex=60;
   d.innerHTML=`<div class="panel" style="height:auto;margin:auto;max-width:440px;border-radius:8px"><h2>下載哪個版本？</h2>
   <button class="btn" data-m="total" style="text-align:left"><b>總數版</b><br><span style="font-weight:400;color:var(--muted);font-size:12px">一般訂單本，各分店數量加總後填在尺寸格。</span></button>
