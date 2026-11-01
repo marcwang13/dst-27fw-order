@@ -881,11 +881,12 @@ function renderAdmin(){
   box.innerHTML=`<div class="section-title" style="margin-top:0">訂單彙整</div>
   <div class="kpis"><div class="kpi"><small>訂單</small><b>${T.orders}</b></div><div class="kpi"><small>經銷商</small><b>${T.stores}</b></div><div class="kpi"><small>總件數</small><b>${fmt(T.qty)}</b></div><div class="kpi"><small>零售金額 TWD</small><b>${fmt(T.amt)}</b></div></div>
   <div style="margin-top:12px">${overviewHTML(os.flatMap(o=>o.lines||[]))}</div>
-  <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn" id="a-csv-all" ${os.length?'':'disabled'}>下載全部明細 CSV</button><button class="btn" id="a-csv-sku" ${os.length?'':'disabled'}>下載款色彙總 CSV</button></div>
+  <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn pri" id="a-handoff" ${os.length?'':'disabled'}>一鍵統整交單</button><button class="btn" id="a-csv-all" ${os.length?'':'disabled'}>下載全部明細 CSV</button><button class="btn" id="a-csv-sku" ${os.length?'':'disabled'}>下載款色彙總 CSV</button></div>
   <div id="admin-msg" style="margin-top:10px"></div>
   <div class="section-title">各經銷商訂單</div>
   ${os.length?'<div class="cards">'+os.map(o=>`<div class="oc"><h3>${esc(o.store)} <span class="num" style="font-weight:400;color:var(--muted);font-size:13px">${esc(o.oid)}</span><span class="pill ${o.status==='已確認'?'ok':''}">${esc(o.status||'已送出')}</span>${o.branches&&o.branches.length?`<span class="pill">連鎖 ${o.branches.length} 店</span>`:''}</h3><div class="sub">${esc(o.contact)}${o.phone?' ・ '+esc(o.phone):''}${o.email?' ・ '+esc(o.email):''} ・ ${fmtTime(o.submittedAt)} ・ ${o.styles} 款色 ・ <b>${fmt(o.qty)}</b> 件 ・ 零售 <b>${fmt(o.amount)}</b>${o.note?`<br>備註：${esc(o.note)}`:''}${o.edited?`<br><span style="color:var(--muted)">最後修改：${esc(o.edited)}</span>`:''}</div><div class="acts"><button class="btn sm" data-aedit="${esc(o.uid)}|${esc(o.oid)}">編輯訂單</button><button class="btn sm" data-adet="${esc(o.uid)}|${esc(o.oid)}">${ADET.has(o.oid)?'收起明細':'看明細'}</button><button class="btn sm" data-axls="${esc(o.uid)}|${esc(o.oid)}">Excel</button><button class="btn sm" data-acsv="${esc(o.uid)}|${esc(o.oid)}">CSV</button><button class="btn sm danger" data-adel="${esc(o.uid)}|${esc(o.oid)}">刪除訂單</button>${o.status==='已確認'?'':`<button class="btn sm pri" data-ok="${esc(o.uid)}|${esc(o.oid)}">標記已確認</button>`}</div>${ADET.has(o.oid)?orderDetailHTML(o):''}</div>`).join('')+'</div>':'<div class="msg info">經銷商送出的訂單會即時出現在這裡。把頁面分享給經銷商（Contributor 權限）就能開始收單。</div>'}
   ${aggRows.length?`<div class="section-title">款色彙總</div><div class="tbl"><table><thead><tr><th>分頁</th><th>品名</th><th>顏色</th><th>尺寸分布</th><th class="r">店數</th><th class="r">件數</th><th class="r">零售金額</th></tr></thead><tbody>${aggRows.map(a=>`<tr><td>${esc(a.l.sheet)}</td><td>${esc(a.l.zh||a.l.en)}<div class="code">${esc(a.l.style)} ／ ${esc(a.l.sku)}</div></td><td>${esc(a.l.color)}</td><td class="num" style="font-size:12px">${Object.entries(a.sz).map(([k,v])=>esc(k)+':'+v).join(' ')}</td><td class="r num">${a.stores.size}</td><td class="r num">${a.qty}</td><td class="r num">${fmt(a.qty*a.l.price)}</td></tr>`).join('')}</tbody></table></div>`:''}`;
+  $('#a-handoff').onclick=async()=>{ const b=$('#a-handoff'); b.disabled=true; b.textContent='整理中…'; try{ const out=await exportHandoff(os); if(out) msg('#admin-msg','ok','交單檔已下載：'+out.map(([t,q,n])=>`${t} ${fmt(q)} 件${n?'（'+n+' 店）':''}`).join('、')+'。'); }catch(e){ msg('#admin-msg','err',e.message||'交單檔產生失敗'); } b.disabled=false; b.textContent='一鍵統整交單'; };
   $('#a-csv-all').onclick=async()=>{ try{ await saveCSV('DESCENTE_27FW_全部訂單明細.csv',[CSV_HEAD,...os.flatMap(csvRows)]); }catch(e){ if(e?.code!=='declined'&&e?.code!=='cancelled') msg('#admin-msg','err',e.message||'下載未完成'); } };
   $('#a-csv-sku').onclick=async()=>{ const sizesAll=[]; aggRows.forEach(a=>Object.keys(a.sz).forEach(s=>{ if(!sizesAll.includes(s)) sizesAll.push(s); })); try{ await saveCSV('DESCENTE_27FW_款色彙總.csv',[['分頁','月份','款號','色碼 SKU','英文品名','中文品名','顏色','店數','件數','台灣建議售價','零售金額',...sizesAll],...aggRows.map(a=>[a.l.sheet,a.l.mon,a.l.style,a.l.sku,a.l.en,a.l.zh,a.l.color,a.stores.size,a.qty,a.l.price,a.qty*a.l.price,...sizesAll.map(s=>a.sz[s]||'')])]); }catch(e){ if(e?.code!=='declined'&&e?.code!=='cancelled') msg('#admin-msg','err',e.message||'下載未完成'); } };
 }
@@ -1012,6 +1013,96 @@ async function buildBook(qty, meta){
     brInfo.B.forEach((b,k)=>{ const col=colL(brInfo.c0+k); const P=colL(brInfo.cP); const row=sum.getRow(y); row.getCell(1).value=b.name; row.getCell(2).value={formula:`'分店配貨'!${col}${brInfo.tot}`}; row.getCell(3).value={formula:`SUMPRODUCT('分店配貨'!${col}5:${col}${Math.max(5,brInfo.last)},'分店配貨'!${P}5:${P}${Math.max(5,brInfo.last)})`}; for(let c=1;c<=3;c++){ const cell=row.getCell(c); cell.font=F; cell.border=border; if(c>1) cell.numFmt='#,##0'; } y++; }); }
   return wb;
 }
+const HO_BRAND='DESCENTE 27FW EARLY BUY', HO_FILE='DESCENTE_27FW', HO_KEY='dst-ho-disc';
+// ===== 一鍵統整交單：把所有有效訂單整理成品牌交單格式（APP／ACC／FTW 三頁）=====
+function divOf(it){ if(it.div) return it.div; const t=[it.sheet,it.cat].join(' ');
+  if(/鞋|靴|FTW|FOOTWEAR|SHOE|SNEAKER|SANDAL/i.test(t)) return 'FTW';
+  if(/衣|衫|褲|裙|外套|背心|T恤|POLO|套組|套裝|夾克|洋裝|APP/i.test(t)) return 'APP';
+  if(/配件|球袋|帽|手套|襪|包|袋|毛巾|皮帶|腰帶|球Tee|球桿套|眼鏡|燈|登山杖|水壺|傘|ACC/i.test(t)) return 'ACC';
+  return 'APP'; }
+const HO_DIVS=[['APP','APP(衣)'],['ACC','ACC(配)'],['FTW','FTW(鞋)']];
+function hoSizes(its){ const u=new Set(); its.forEach(i=>i.sizes.forEach(z=>u.add(z))); const known=SZ_ORDER.filter(z=>u.has(z)); const rest=[...u].filter(z=>!SZ_ORDER.includes(z)).sort((a,b)=>{ const x=parseFloat(a),y=parseFloat(b); return (isNaN(x)||isNaN(y))?String(a).localeCompare(String(b)):x-y; }); return known.concat(rest); }
+function hoUnits(os){ const m=new Map(); const add=(label,lines)=>{ const u=m.get(label)||{label,q:{}}; for(const l of lines||[]){ if(!BY[l.k]||!l.qty) continue; const r=u.q[l.k]=u.q[l.k]||{}; r[l.size]=(r[l.size]||0)+l.qty; } m.set(label,u); };
+  [...os].filter(o=>o.status!=='作廢').sort((a,b)=>String(a.submittedAt).localeCompare(String(b.submittedAt))).forEach(o=>{ const st=String(o.store||'未填店名').trim(); if(o.branches&&o.branches.length) o.branches.forEach(b=>add(`${st} ${String(b.name||'').trim()}`.trim(),b.lines)); else add(st,o.lines); });
+  return [...m.values()]; }
+async function buildHandoff(os, disc){
+  const EJ=await loadExcelJS(); const wb=new EJ.Workbook(); wb.creator=HO_BRAND; wb.created=new Date();
+  const units=hoUnits(os);
+  const F={name:'Arial',size:11};
+  const fill=c=>({type:'pattern',pattern:'solid',fgColor:{argb:c}});
+  const hair={style:'hair',color:{argb:'FF7F7F7F'}}, med={style:'medium',color:{argb:'FF000000'}};
+  const bd={top:hair,left:hair,bottom:hair,right:hair};
+  const DARK='FF3F3F3F', PINK='FFFF33CC', YEL='FFFFFF00', GREY='FFA6A6A6', BLUE='FFDDEBF7', TOT='FFEBEBE8';
+  const INFO=[['STYLE NO.',13,'style'],['STYLE & COLOR',21,'sku'],['COLOR',8,'cc'],['顏色',12,'color'],['CATEGORY',12,'cat'],['IMAGE',13,null],['STYLE NAME',34,'en'],['中文品名',22,'zh'],['GENDER',8,'gen'],['月份',7,'mon'],['TW-SRP\n(NTD)',11,'price']];
+  const imgCache={}; const out=[];
+  for(const [dv,tab] of HO_DIVS){
+    const its=ITEMS.filter(i=>divOf(i)===dv).sort((a,b)=>SHEETS.indexOf(a.sheet)-SHEETS.indexOf(b.sheet));
+    const ws=wb.addWorksheet(tab,{views:[{state:'frozen',xSplit:INFO.length,ySplit:7,showGridLines:false,zoomScale:85}]});
+    ws.pageSetup={orientation:'landscape',paperSize:9,fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.2,right:.2,top:.3,bottom:.3,header:.1,footer:.1}}; ws.getCell('A1').value=`${HO_BRAND} ORDER SHEET｜${tab}`; ws.getCell('A1').font={name:'Arial',size:20,bold:true};
+    ws.getCell('A3').value=`EMERS 交單彙整｜匯出 ${fmtTime(new Date().toISOString())}｜有效訂單 ${os.filter(o=>o.status!=='作廢').length} 張`; ws.getCell('A3').font={name:'Arial',size:12};
+    if(!its.length){ ws.getCell('A5').value='這一季沒有這個類別的商品。'; ws.getCell('A5').font={...F,color:{argb:'FF7F7F7F'}}; INFO.forEach(([h,w],k)=>ws.getColumn(k+1).width=w); out.push([tab,0,0]); continue; }
+    const sizes=hoSizes(its); const n=sizes.length;
+    const us=units.filter(u=>its.some(i=>u.q[i.id]&&Object.values(u.q[i.id]).some(v=>v>0)));
+    const c0=INFO.length+1, cT=c0+n, cS=cT+1, cA=cS+1;              // WHSL 尺寸、TTL、TTL SRP、訂單金額
+    const blk=us.map((u,k)=>{ const s=cA+2+k*(n+2); return {u,s,t:s+n}; });  // 每店：尺寸＋TTL，中間空一欄
+    const R0=8, R1=R0+its.length-1, RT=R1+1, L=colL;
+    INFO.forEach(([h,w],k)=>ws.getColumn(k+1).width=w);
+    for(let c=c0;c<cT;c++) ws.getColumn(c).width=7; ws.getColumn(cT).width=10; ws.getColumn(cS).width=14; ws.getColumn(cA).width=14; ws.getColumn(cA+1).width=3;
+    blk.forEach(b=>{ for(let c=b.s;c<b.t;c++) ws.getColumn(c).width=7; ws.getColumn(b.t).width=9; ws.getColumn(b.t+1).width=3; });
+    // 第 5-6 列：折數、WHSL TTL、各店名
+    ws.getCell(5,cA).value='折數'; ws.getCell(5,cA).font={...F,bold:true}; ws.getCell(5,cA).alignment={horizontal:'center'};
+    const dc=ws.getCell(6,cA); dc.value=disc; dc.numFmt='0%'; dc.font={name:'Arial',size:12,bold:true}; dc.fill=fill('FFFFF2CC'); dc.alignment={horizontal:'center',vertical:'middle'}; dc.border={top:med,left:med,bottom:med,right:med};
+    if(n>1) ws.mergeCells(6,c0,6,c0+Math.min(n,4)-1); const wt=ws.getCell(6,c0); wt.value='WHSL TTL'; wt.alignment={vertical:'middle'}; wt.font={name:'Arial',size:22,bold:true}; wt.fill=fill(PINK);
+    const tt=ws.getCell(6,cT); tt.value={formula:`SUM(${L(cT)}${R0}:${L(cT)}${R1})`}; tt.font={name:'Arial',size:18,bold:true}; tt.fill=fill(PINK); tt.numFmt='#,##0'; tt.alignment={horizontal:'center'};
+    blk.forEach(b=>{ const c=ws.getCell(6,b.s); c.value=b.u.label; c.font={name:'Arial',size:16,bold:true}; c.fill=fill(YEL);
+      const t=ws.getCell(6,b.t); t.value={formula:`SUM(${L(b.t)}${R0}:${L(b.t)}${R1})`}; t.font={name:'Arial',size:14,bold:true}; t.numFmt='#,##0'; t.alignment={horizontal:'center'}; });
+    ws.getRow(6).height=34;
+    // 第 7 列：表頭
+    const hr=ws.getRow(7); hr.height=40;
+    const H=(c,v,first,last)=>{ const x=hr.getCell(c); x.value=v; x.font={name:'Arial',size:11,bold:true,color:{argb:'FFFFFFFF'}}; x.fill=fill(DARK); x.alignment={horizontal:'center',vertical:'middle',wrapText:true}; x.border={top:hair,bottom:hair,left:first?med:hair,right:last?med:hair}; };
+    INFO.forEach(([h],k)=>H(k+1,h));
+    sizes.forEach((z,j)=>H(c0+j,isNaN(+z)?z:+z,j===0)); H(cT,'TTL',false,true); H(cS,'TTL SRP'); H(cA,'訂單金額');
+    blk.forEach(b=>{ sizes.forEach((z,j)=>H(b.s+j,isNaN(+z)?z:+z,j===0)); H(b.t,'TTL',false,true); });
+    // 商品列
+    for(let k=0;k<its.length;k++){ const it=its[k], r=R0+k, row=ws.getRow(r); row.height=62;
+      INFO.forEach(([h,,f],j)=>{ const c=row.getCell(j+1); c.value=f?(it[f]??''):null; if(f==='price'){ c.value=it.price||null; c.numFmt='#,##0'; } c.font=F; c.border=bd; c.alignment={horizontal:j===6||j===7?'left':'center',vertical:'middle',wrapText:true}; });
+      sizes.forEach((z,j)=>{ const has=it.sizes.includes(z); const L0=j===0;
+        const w=row.getCell(c0+j); w.value=blk.length?{formula:blk.map(b=>`${L(b.s+j)}${r}`).join('+')}:0; w.numFmt='0;-0;;@'; w.font={...F,bold:true}; w.alignment={horizontal:'center',vertical:'middle'}; w.fill=fill(has?BLUE:GREY); w.border={...bd,left:L0?med:hair};
+        blk.forEach(b=>{ const c=row.getCell(b.s+j); const v=((b.u.q[it.id]||{})[z])||0; c.value=v||null; c.numFmt='0;-0;;@'; c.font={...F,bold:true}; c.alignment={horizontal:'center',vertical:'middle'}; c.border={...bd,left:L0?med:hair}; if(!has) c.fill=fill(GREY); }); });
+      const t=row.getCell(cT); t.value={formula:`SUM(${L(c0)}${r}:${L(cT-1)}${r})`}; t.numFmt='#,##0;-#,##0;;@'; t.font={name:'Arial',size:13,bold:true}; t.fill=fill(BLUE); t.alignment={horizontal:'center',vertical:'middle'}; t.border={...bd,right:med};
+      const s=row.getCell(cS); s.value={formula:`${L(INFO.length)}${r}*${L(cT)}${r}`}; s.numFmt='#,##0;-#,##0;;@'; s.font=F; s.border=bd; s.alignment={vertical:'middle'};
+      const a=row.getCell(cA); a.value={formula:`${L(cS)}${r}*$${L(cA)}$6`}; a.numFmt='#,##0;-#,##0;;@'; a.font=F; a.border=bd; a.alignment={vertical:'middle'};
+      blk.forEach(b=>{ const c=row.getCell(b.t); c.value={formula:`SUM(${L(b.s)}${r}:${L(b.t-1)}${r})`}; c.numFmt='#,##0;-#,##0;;@'; c.font={...F,bold:true}; c.border={...bd,right:med}; c.alignment={horizontal:'center',vertical:'middle'}; });
+      const h=it.doll||(it.photos||[])[0]; if(h&&IMG[h]){ if(!imgCache[h]) imgCache[h]={id:wb.addImage({base64:IMG[h],extension:'jpeg'}),dims:await imgDims(IMG[h])};
+        const [iw,ih]=imgCache[h].dims, BW=96, BH=82, sc=Math.min((BW-6)/iw,(BH-6)/ih), W=Math.round(iw*sc), HH=Math.round(ih*sc);
+        ws.addImage(imgCache[h].id,{tl:{col:5+(BW-W)/2/BW,row:r-1+(BH-HH)/2/BH},ext:{width:W,height:HH},editAs:'oneCell'}); }
+    }
+    // 合計列
+    const tr=ws.getRow(RT); tr.height=24; tr.getCell(1).value='TOTAL';
+    const sumCols=[...sizes.map((_,j)=>c0+j),cT,cS,cA,...blk.flatMap(b=>[...sizes.map((_,j)=>b.s+j),b.t])];
+    sumCols.forEach(c=>{ tr.getCell(c).value={formula:`SUM(${L(c)}${R0}:${L(c)}${R1})`}; tr.getCell(c).numFmt='#,##0;-#,##0;;@'; tr.getCell(c).alignment={horizontal:'center'}; });
+    for(let c=1;c<=Math.max(cA,...blk.map(b=>b.t));c++){ if(c===cA+1||blk.some(b=>c===b.t+1)) continue; const x=tr.getCell(c); x.font={name:'Arial',size:11,bold:true,color:{argb:'FFFFFFFF'}}; x.fill=fill(DARK); x.border={top:med,bottom:med}; }
+    const q=its.reduce((t,i)=>t+us.reduce((s,u)=>s+Object.values(u.q[i.id]||{}).reduce((a,v)=>a+v,0),0),0);
+    out.push([tab,q,us.length]);
+  }
+  return {wb,out};
+}
+async function exportHandoff(os){
+  const disc=await askDisc(); if(disc==null) return null;
+  const {wb,out}=await buildHandoff(os,disc); const buf=await wb.xlsx.writeBuffer();
+  const d=new Date(), ymd=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([buf])); a.download=`${HO_FILE}_交單彙整_${ymd}.xlsx`; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },3000);
+  return out;
+}
+function askDisc(){ return new Promise(res=>{ let last=''; try{ last=localStorage.getItem(HO_KEY)||''; }catch(e){}
+  const d=document.createElement('div'); d.className='scrim'; d.style.zIndex=60;
+  d.innerHTML=`<div class="panel" style="height:auto;margin:auto;max-width:420px;border-radius:8px"><h2>一鍵統整交單</h2>
+  <div style="font-size:13px;color:var(--muted)">把所有有效訂單（不含作廢）整理成品牌交單格式：APP(衣)、ACC(配)、FTW(鞋)三頁，每家店一個區塊，左邊是 WHSL TTL 總量。</div>
+  <label style="display:flex;flex-direction:column;gap:4px;font-size:13px;margin-top:6px">折數（訂單金額 = 零售金額 × 折數，例如 48；不填就是 100%）<input id="ho-disc" inputmode="decimal" value="${esc(last)}" placeholder="例如 48" style="border:1.5px solid var(--line);border-radius:8px;padding:8px 10px;font-size:15px"></label>
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px"><button class="btn sm" data-x>取消</button><button class="btn sm pri" data-go>產生 Excel</button></div></div>`;
+  const done=v=>{ d.remove(); res(v); };
+  d.addEventListener('click',e=>{ if(e.target===d||e.target.closest('[data-x]')) done(null); if(e.target.closest('[data-go]')){ const raw=d.querySelector('#ho-disc').value.trim(); let v=raw===''?1:parseFloat(raw); if(isNaN(v)||v<=0){ d.querySelector('#ho-disc').focus(); return; } if(v>1) v=v/100; try{ localStorage.setItem(HO_KEY,raw); }catch(e){} done(v); } });
+  document.body.appendChild(d); setTimeout(()=>d.querySelector('#ho-disc').focus(),50); }); }
 function chooseExport(){ return new Promise(res=>{ const d=document.createElement('div'); d.className='scrim'; d.style.zIndex=60;
   d.innerHTML=`<div class="panel" style="height:auto;margin:auto;max-width:440px;border-radius:8px"><h2>下載哪個版本？</h2>
   <button class="btn" data-m="total" style="text-align:left"><b>總數版</b><br><span style="font-weight:400;color:var(--muted);font-size:12px">一般訂單本，各分店數量加總後填在尺寸格。</span></button>
