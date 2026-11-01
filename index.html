@@ -1013,7 +1013,7 @@ async function buildBook(qty, meta){
     brInfo.B.forEach((b,k)=>{ const col=colL(brInfo.c0+k); const P=colL(brInfo.cP); const row=sum.getRow(y); row.getCell(1).value=b.name; row.getCell(2).value={formula:`'分店配貨'!${col}${brInfo.tot}`}; row.getCell(3).value={formula:`SUMPRODUCT('分店配貨'!${col}5:${col}${Math.max(5,brInfo.last)},'分店配貨'!${P}5:${P}${Math.max(5,brInfo.last)})`}; for(let c=1;c<=3;c++){ const cell=row.getCell(c); cell.font=F; cell.border=border; if(c>1) cell.numFmt='#,##0'; } y++; }); }
   return wb;
 }
-const HO_BRAND='DESCENTE 27FW EARLY BUY', HO_FILE='DESCENTE_27FW', HO_KEY='dst-ho-disc';
+const HO_BRAND='DESCENTE 27FW EARLY BUY', HO_FILE='DESCENTE_27FW', HO_KEY='dst-ho';
 // ===== 一鍵統整交單：把所有有效訂單整理成品牌交單格式（APP／ACC／FTW 三頁）=====
 function divOf(it){ if(it.div) return it.div; const t=[it.sheet,it.cat].join(' ');
   if(/鞋|靴|FTW|FOOTWEAR|SHOE|SNEAKER|SANDAL/i.test(t)) return 'FTW';
@@ -1021,7 +1021,10 @@ function divOf(it){ if(it.div) return it.div; const t=[it.sheet,it.cat].join(' '
   if(/配件|球袋|帽|手套|襪|包|袋|毛巾|皮帶|腰帶|球Tee|球桿套|眼鏡|燈|登山杖|水壺|傘|ACC/i.test(t)) return 'ACC';
   return 'APP'; }
 const HO_DIVS=[['APP','APP(衣)'],['ACC','ACC(配)'],['FTW','FTW(鞋)']];
-function hoSizes(its){ const u=new Set(); its.forEach(i=>i.sizes.forEach(z=>u.add(z))); const known=SZ_ORDER.filter(z=>u.has(z)); const rest=[...u].filter(z=>!SZ_ORDER.includes(z)).sort((a,b)=>{ const x=parseFloat(a),y=parseFloat(b); return (isNaN(x)||isNaN(y))?String(a).localeCompare(String(b)):x-y; }); return known.concat(rest); }
+function hoSizes(its){ const u=[]; its.forEach(i=>i.sizes.forEach(z=>{ if(!u.includes(z)) u.push(z); }));
+  const ORD=(typeof SZ_ORDER!=='undefined'&&SZ_ORDER.length)?SZ_ORDER:['W-XS','W-S','W-M','W-L','W-XL','W-2XL','XXS','XS','S','M','L','XL','XXL','2XL','3XL','4XL','5XL'];
+  const known=ORD.filter(z=>u.includes(z)), nums=u.filter(z=>!ORD.includes(z)&&!isNaN(parseFloat(z))).sort((a,b)=>{ const sa=String(a).replace(/^[\d.]+/,''), sb=String(b).replace(/^[\d.]+/,''); return sa.localeCompare(sb)||parseFloat(a)-parseFloat(b); }), rest=u.filter(z=>!ORD.includes(z)&&isNaN(parseFloat(z)));
+  return known.concat(nums,rest); }
 function hoUnits(os){ const m=new Map(); const add=(label,lines)=>{ const u=m.get(label)||{label,q:{}}; for(const l of lines||[]){ if(!BY[l.k]||!l.qty) continue; const r=u.q[l.k]=u.q[l.k]||{}; r[l.size]=(r[l.size]||0)+l.qty; } m.set(label,u); };
   [...os].filter(o=>o.status!=='作廢').sort((a,b)=>String(a.submittedAt).localeCompare(String(b.submittedAt))).forEach(o=>{ const st=String(o.store||'未填店名').trim(); if(o.branches&&o.branches.length) o.branches.forEach(b=>add(`${st} ${String(b.name||'').trim()}`.trim(),b.lines)); else add(st,o.lines); });
   return [...m.values()]; }
@@ -1070,7 +1073,7 @@ async function buildHandoff(os){
     blk.forEach(b=>{
       const srp=money(b.s,b.t,4,'SRP TTL',`SUMPRODUCT($${L(cP)}$${R0}:$${L(cP)}$${R1},${L(b.t)}${R0}:${L(b.t)}${R1})`,LYEL);
       money(b.s,b.t,5,'WHL TTL',`${srp}*${DISC}`,LYEL);
-      refs[tab][b.u.label]=`'${tab}'!${srp}`;
+      refs[tab][b.u.label]={srp:`'${tab}'!${srp}`,qty:`'${tab}'!${L(b.t)}6`};
       const c=ws.getCell(6,b.s); c.value=b.u.label; c.font={name:'Arial',size:16,bold:true}; c.fill=fill(YEL); c.alignment={vertical:'middle'};
       for(let x=b.s+1;x<b.t;x++) ws.getCell(6,x).fill=fill(YEL);
       const t=ws.getCell(6,b.t); t.value={formula:`SUM(${L(b.t)}${R0}:${L(b.t)}${R1})`}; t.font={name:'Arial',size:14,bold:true}; t.fill=fill(YEL); t.numFmt='#,##0'; t.alignment={horizontal:'center',vertical:'middle'}; });
@@ -1102,24 +1105,31 @@ async function buildHandoff(os){
     const q=its.reduce((t,i)=>t+us.reduce((s,u)=>s+Object.values(u.q[i.id]||{}).reduce((a,v)=>a+v,0),0),0);
     out.push([tab,q,us.length]);
   }
-  // 總表：BY 客戶
-  [22,18,18,18,20,20].forEach((w,k)=>sum.getColumn(k+1).width=w);
+  // 總表：BY 客戶（件數 TTL＋SRP 金額）
   sum.getCell('A1').value=`${HO_BRAND} 交單總表`; sum.getCell('A1').font={name:'Arial',size:20,bold:true};
   sum.getCell('A2').value=`EMERS 交單彙整｜匯出 ${stamp}｜有效訂單 ${nOrd} 張｜下單金額以台灣零售價（SRP）計`; sum.getCell('A2').font={name:'Arial',size:12};
   const a4=sum.getCell('A4'), b4=sum.getCell('B4'); a4.value='折數'; a4.font={name:'Arial',size:12,bold:true}; a4.alignment={horizontal:'right'};
   b4.value=HO_DISC; b4.numFmt='0%'; b4.font={name:'Arial',size:14,bold:true}; b4.fill=fill('FFFFF2CC'); b4.alignment={horizontal:'center'}; b4.border={top:med,left:med,bottom:med,right:med};
   sum.getCell('C4').value='← 改這格，三個分頁的 WHL TTL 會一起更新'; sum.getCell('C4').font={...F,color:{argb:'FF7F7F7F'}};
-  const H0=6, heads=['客戶','APP 下單金額 (SRP)','ACC 下單金額 (SRP)','FTW 下單金額 (SRP)','客戶加總 (SRP)','× 折數 (WHL)'];
-  heads.forEach((h,k)=>{ const c=sum.getRow(H0).getCell(k+1); c.value=h; c.font={name:'Arial',size:11,bold:true,color:{argb:'FFFFFFFF'}}; c.fill=fill(DARK); c.alignment={horizontal:'center',vertical:'middle',wrapText:true}; c.border=bd; });
-  sum.getRow(H0).height=32;
+  const H0=6;
+  const cols=[['客戶',22]]; HO_DIVS.forEach(([dv])=>{ cols.push([`${dv} TTL\n(件)`,10],[`${dv} 下單金額\n(SRP)`,17]); }); cols.push(['客戶 TTL\n(件)',11],['件數\n佔比',9],['客戶加總\n(SRP)',18],['金額\n佔比',9],['× 折數\n(WHL)',18]);
+  const cQ=2+HO_DIVS.length*2, cQp=cQ+1, cSum=cQ+2, cSp=cQ+3, cW=cQ+4, RT=H0+1+units.length, PCT='0.0%';
+  cols.forEach(([h,w],k)=>{ sum.getColumn(k+1).width=w; const c=sum.getRow(H0).getCell(k+1); c.value=h; c.font={name:'Arial',size:11,bold:true,color:{argb:'FFFFFFFF'}}; c.fill=fill(DARK); c.alignment={horizontal:'center',vertical:'middle',wrapText:true}; c.border=bd; });
+  sum.getRow(H0).height=34;
   let r=H0+1;
   for(const u of units){ const row=sum.getRow(r); row.getCell(1).value=u.label;
-    HO_DIVS.forEach(([,tab],k)=>{ const ref=refs[tab][u.label]; row.getCell(2+k).value=ref?{formula:ref}:0; });
-    row.getCell(5).value={formula:`SUM(B${r}:D${r})`}; row.getCell(6).value={formula:`E${r}*$B$4`};
-    for(let c=1;c<=6;c++){ const x=row.getCell(c); x.font={...F,bold:c===1||c>=5}; x.border=bd; if(c>1) x.numFmt='#,##0'; if(c===6) x.fill=fill('FFFFF2CC'); } row.height=20; r++; }
+    HO_DIVS.forEach(([,tab],k)=>{ const ref=refs[tab][u.label]; row.getCell(2+k*2).value=ref?{formula:ref.qty}:0; row.getCell(3+k*2).value=ref?{formula:ref.srp}:0; });
+    row.getCell(cQ).value={formula:HO_DIVS.map((_,k)=>`${L(2+k*2)}${r}`).join('+')};
+    row.getCell(cSum).value={formula:HO_DIVS.map((_,k)=>`${L(3+k*2)}${r}`).join('+')};
+    row.getCell(cW).value={formula:`${L(cSum)}${r}*$B$4`};
+    row.getCell(cQp).value={formula:`IF($${L(cQ)}$${RT}=0,0,${L(cQ)}${r}/$${L(cQ)}$${RT})`}; row.getCell(cSp).value={formula:`IF($${L(cSum)}$${RT}=0,0,${L(cSum)}${r}/$${L(cSum)}$${RT})`};
+    for(let c=1;c<=cW;c++){ const x=row.getCell(c); x.font={...F,bold:c===1||c>=cQ}; x.border=bd; if(c>1) x.numFmt=(c===cQp||c===cSp)?PCT:'#,##0'; if(c===cQp||c===cSp) x.alignment={horizontal:'center'}; if(c===cQ) x.fill=fill(BLUE); if(c===cW) x.fill=fill('FFFFF2CC'); if(c>1&&c<cQ&&c%2===0) x.alignment={horizontal:'center'}; } row.getCell(cQ).alignment={horizontal:'center'}; row.height=20; r++; }
   const tr=sum.getRow(r); tr.getCell(1).value='整體加總';
-  for(let c=2;c<=6;c++){ tr.getCell(c).value={formula:`SUM(${L(c)}${H0+1}:${L(c)}${Math.max(H0+1,r-1)})`}; tr.getCell(c).numFmt='#,##0'; }
-  for(let c=1;c<=6;c++){ const x=tr.getCell(c); x.font={name:'Arial',size:12,bold:true,color:{argb:'FFFFFFFF'}}; x.fill=fill(DARK); x.border={top:med,bottom:med}; } tr.height=24;
+  for(let c=2;c<=cW;c++){ tr.getCell(c).value={formula:`SUM(${L(c)}${H0+1}:${L(c)}${Math.max(H0+1,r-1)})`}; tr.getCell(c).numFmt=(c===cQp||c===cSp)?PCT:'#,##0'; if((c%2===0&&c<=cQ)||c===cQp||c===cSp) tr.getCell(c).alignment={horizontal:'center'}; }
+  for(let c=1;c<=cW;c++){ const x=tr.getCell(c); x.font={name:'Arial',size:12,bold:true,color:{argb:'FFFFFFFF'}}; x.fill=fill(DARK); x.border={top:med,bottom:med}; } tr.height=24;
+  const pr=sum.getRow(r+1); pr.getCell(1).value='品類佔比';
+  HO_DIVS.forEach((_,k)=>{ const q=2+k*2, a=3+k*2; pr.getCell(q).value={formula:`IF($${L(cQ)}$${r}=0,0,${L(q)}${r}/$${L(cQ)}$${r})`}; pr.getCell(a).value={formula:`IF($${L(cSum)}$${r}=0,0,${L(a)}${r}/$${L(cSum)}$${r})`}; });
+  for(let c=1;c<=cW;c++){ const x=pr.getCell(c); x.font={...F,bold:true}; x.fill=fill('FFEBEBE8'); x.border=bd; if(c>1){ x.numFmt=PCT; x.alignment={horizontal:'center'}; } } pr.height=20;
   sum.views=[{state:'frozen',ySplit:H0,showGridLines:false}];
   return {wb,out};
 }
