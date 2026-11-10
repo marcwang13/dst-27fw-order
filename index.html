@@ -169,6 +169,7 @@ main{padding-block:12px}
 .sz.na input,.mx input.na{background:repeating-linear-gradient(135deg,var(--sunk) 0 4px,var(--line) 4px 6px);border-color:var(--line);cursor:not-allowed}
 .sz.na span,.mx th.na span{opacity:.55}
 .sizes{align-items:flex-end}
+.sizes.ftw{max-width:468px}
 .szbr{flex-basis:100%;height:2px}
 .sz input{width:48px;height:36px;text-align:center;border:1.5px solid color-mix(in srgb,var(--acc) 35%,var(--line));border-radius:4px;background:var(--bg);font-family:var(--f-mono);font-size:14px;-moz-appearance:textfield}
 .sz input::-webkit-outer-spin-button,.sz input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
@@ -347,7 +348,7 @@ tfoot td{font-weight:700;background:var(--sunk)}
       <input type="file" id="x-file" accept=".xlsx" hidden>
       <span class="xlhint" id="x-msg"></span>
     </div>
-    <p class="sznote"><b>尺寸</b>依 DESCENTE 尺寸表：女裝 XS～2XL、男裝 S～4XL、中性款 W-XS～W-L（女版）＋M～4XL。尺寸下方數字是上身／下身尺寸（上衣看上身、褲子看下身）。斜線灰格＝這個顏色沒開的尺寸。</p>
+    <p class="sznote"><b>尺寸</b>依 DESCENTE 尺寸表：女裝 XS～2XL、男裝 S～4XL、中性款 W-XS～W-L（女版）＋M～4XL。尺寸下方數字是上身／下身尺寸（上衣看上身、褲子看下身）。斜線灰格＝這個顏色沒開的尺寸。鞋類尺寸是腳長公釐（mm），拖鞋每 10mm 一個尺寸。</p>
   </div>
   <div class="rail">
     <div class="wrap">
@@ -435,8 +436,8 @@ tfoot td{font-weight:700;background:var(--sunk)}
 const ITEMS = window.SDR_ITEMS || [];
 const IMG = window.SDR_IMG || {};
 const BY = Object.fromEntries(ITEMS.map(i=>[i.id,i]));
-const SHEETS = ['上衣 TOUGH','羽絨','GORE-TEX'];
-const MONTH_ORDER = ['5月','6月','7月','8月'];
+const SHEETS = ['上衣 TOUGH','羽絨','GORE-TEX','鞋類'];
+const MONTH_ORDER = ['4月','5月','6月','7月','8月'];
 const $ = s=>document.querySelector(s);
 const fmt = n=>Math.round(n||0).toLocaleString('en-US');
 const esc = s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -525,7 +526,7 @@ function itemHTML(it){
   const open=S.open.has(it.id);
   const sh=shareFor(it);
   const sizes = fullSizes(it).map(sz=>{ if(!it.sizes.includes(sz)) return `<label class="sz na"><span>${SZL(sz,it)}</span><input disabled tabindex="-1" aria-label="${esc(sz)} 無此尺寸"></label>`; const v=q[sz]||''; const p=sh?sh.m[sz]:null; const pct=sh?(p!=null?`<span class="pct" title="上季 ${esc(sh.k)} 尺寸銷售佔比"><i style="width:${Math.round(p*100)}%"></i><b>${Math.round(p*100)}%</b></span>`:'<span class="pct na">–</span>'):''; return `<label class="sz"><span>${SZL(sz,it)}</span><input class="${v?'on':''}" type="number" min="0" step="1" inputmode="numeric" id="q-${esc(it.id)}-${esc(sz)}" data-sz="${esc(sz)}" value="${v}" aria-label="${esc(it.en+' '+it.color+' '+sz)} 數量">${pct}</label>`; }).join('').replace((it.run==='U'?/(<label class="sz[^"]*"><span>M<small)/:/(?!)/),'<span class="szbr"></span>$1');
-  const sizesBlock = S.chain ? matrixHTML(it,sh) : `<div class="sizes">${sizes}</div>`;
+  const sizesBlock = S.chain ? matrixHTML(it,sh) : `<div class="sizes${/^F/.test(it.run||'')?' ftw':''}">${sizes}</div>`;
   return `<article class="item ${tq?'has':''}" data-id="${esc(it.id)}">
     <div class="pic">${picHTML(it)}</div>
     <div class="info">
@@ -855,7 +856,7 @@ $('#mine').addEventListener('click',async e=>{
 
 // ---------- 下單分析：款色、尺寸、大類、系列 ----------
 // 款色＝款號＋顏色（商品資料一列、一個色碼）。尺寸＝款號＋顏色＋有下單的尺寸。
-// 這季目錄都是服裝。大類依品類，跟三個分頁不同：羽絨分頁裡的外套和背心會分開算。
+// 這季目錄是服裝和鞋。大類依品類，跟分頁不同：羽絨分頁裡的外套和背心會分開算。
 const AN_GROUPS=[['上衣',['短袖T恤','長袖T恤','短袖POLO衫','長袖POLO衫']],['外套',['羽絨外套','輕量羽絨外套','外套']],['背心',['羽絨背心','背心']],['長褲',['長褲']]];
 function anGroupOf(it){
   if(!it) return '找不到商品';
@@ -932,7 +933,7 @@ function anTable(title,label,rows,tot,note){
 }
 function anTables(a,notes){
   if(!a.tot.qty) return '';
-  return anTable('依大類','大類',anGroupRows(a),a.tot,notes?'這季目錄都是服裝，沒有配件和鞋。上衣是 T 恤和 POLO；外套含羽絨外套、輕量羽絨和 GORE-TEX 外套；背心含羽絨背心。':'')
+  return anTable('依大類','大類',anGroupRows(a),a.tot,notes?'這季目錄是服裝和鞋，沒有配件。上衣是 T 恤和 POLO；外套含羽絨外套、輕量羽絨和 GORE-TEX 外套；背心含羽絨背心；鞋款含跑鞋、休閒鞋、瑪莉珍鞋和拖鞋。':'')
     +anTable('依分頁','分頁',anSheetRows(a),a.tot,'')
     +anTable('依系列','系列',anSeriesRows(a),a.tot,notes?'系列取商品資料的系列欄，寫成「產品線｜主題」，例如 PREMIUM TECH ESSENTIAL｜TOUGH、SNOW｜CANON。訂貨窗口不另外拆開。沒有系列欄的款，改用主題。對不到商品的明細標成「找不到商品」。':'');
 }
@@ -1036,12 +1037,13 @@ $('#admin').addEventListener('click',async e=>{
 });
 
 // ---------- Excel order book ----------
-const SZ_ORDER=['W-XS','W-S','W-M','W-L','W-XL','W-2XL','S','M','L','XL','2XL','3XL','4XL'];
-const RUNS={W:['W-XS','W-S','W-M','W-L','W-XL','W-2XL'],M:['S','M','L','XL','2XL','3XL','4XL'],U:['W-XS','W-S','W-M','W-L','M','L','XL','2XL','3XL','4XL']};
+const FTW_SZ=['220','225','230','235','240','245','250','255','260','265','270','275','280','285','290','295','300'];
+const SZ_ORDER=['W-XS','W-S','W-M','W-L','W-XL','W-2XL','S','M','L','XL','2XL','3XL','4XL',...FTW_SZ];
+const RUNS={W:['W-XS','W-S','W-M','W-L','W-XL','W-2XL'],M:['S','M','L','XL','2XL','3XL','4XL'],U:['W-XS','W-S','W-M','W-L','M','L','XL','2XL','3XL','4XL'],F:FTW_SZ,F10:['220','230','240','250','260','270','280','290']};
 const SZ_NUM={W:{top:{'W-XS':80,'W-S':85,'W-M':90,'W-L':95,'W-XL':100,'W-2XL':105},bottom:{'W-XS':65,'W-S':70,'W-M':75,'W-L':80,'W-XL':85,'W-2XL':90}},
   M:{top:{S:90,M:95,L:100,XL:105,'2XL':110,'3XL':115,'4XL':120},bottom:{S:80,M:85,L:90,XL:95,'2XL':100,'3XL':105,'4XL':110}},
   U:{top:{'W-XS':80,'W-S':85,'W-M':90,'W-L':92,M:95,L:100,XL:105,'2XL':110,'3XL':115,'4XL':120},bottom:{'W-XS':65,'W-S':70,'W-M':75,'W-L':80,M:85,L:90,XL:95,'2XL':100,'3XL':105,'4XL':110}}};
-const SIZE_COLS={'上衣 TOUGH':SZ_ORDER,'羽絨':SZ_ORDER,'GORE-TEX':SZ_ORDER};
+const SIZE_COLS={'上衣 TOUGH':SZ_ORDER,'羽絨':SZ_ORDER,'GORE-TEX':SZ_ORDER,'鞋類':FTW_SZ};
 function SZL(z,it){ const t=(SZ_NUM[it&&it.run]||{})[(it&&it.part)||'top']||{}; const n=t[z]; return esc(z)+(n!=null?`<small class="szn">${n}</small>`:''); }
 function fullSizes(it){ const all=RUNS[it.run]||SZ_ORDER; const extra=it.sizes.filter(z=>!all.includes(z)); return [...all,...extra]; }
 function sheetSizes(sh){ const u=new Set(); ITEMS.filter(i=>i.sheet===sh).forEach(i=>(RUNS[i.run]||i.sizes).forEach(z=>u.add(z))); if(u.size) return SZ_ORDER.filter(z=>u.has(z)).concat([...u].filter(z=>!SZ_ORDER.includes(z))); const used=new Set(); ITEMS.filter(i=>i.sheet===sh).forEach(i=>i.sizes.forEach(z=>used.add(z))); const base=(SIZE_COLS[sh]||[]).filter(z=>used.has(z)); used.forEach(z=>{ if(!base.includes(z)) base.push(z); }); return base; }
@@ -1150,7 +1152,7 @@ async function buildBook(qty, meta){
   for(const it of ITEMS){ const q=qty[it.id]; if(!q) continue; let n=0; for(const z in q){ if((Number(q[z])||0)>0) n++; } if(!n) continue; const g=anGroupOf(it); if(!grpNames.includes(g)) grpNames.push(g); }
   for(const g of grpNames){ const row=sum.getRow(r); row.getCell(1).value=g; row.getCell(2).value={formula:keyF('grpCol','colors',g)}; row.getCell(3).value={formula:keyF('grpCol','sizes',g)}; row.getCell(4).value={formula:keyF('grpCol','qty',g)}; row.getCell(5).value={formula:keyF('grpCol','amt',g)}; paintNum(row,5); r++; }
   const gtr=sum.getRow(r); gtr.getCell(1).value='合計'; paintTot(gtr,g0,5); r+=2;
-  sum.mergeCells(r,1,r,5); sum.getCell(r,1).value='這季目錄都是服裝，沒有配件和鞋。大類依品類：上衣是 T 恤和 POLO，外套含羽絨外套、輕量羽絨和 GORE-TEX 外套，背心含羽絨背心。款色是款號加顏色；尺寸是款號、顏色加有下單的尺寸。改黃色數量格後，分頁和大類會跟著重算。'; sum.getCell(r,1).font={...F,color:{argb:'FF6B6B70'}}; sum.getCell(r,1).alignment={wrapText:true,vertical:'top'}; sum.getRow(r).height=48; r+=2;
+  sum.mergeCells(r,1,r,5); sum.getCell(r,1).value='這季目錄是服裝和鞋，沒有配件。大類依品類：上衣是 T 恤和 POLO，外套含羽絨外套、輕量羽絨和 GORE-TEX 外套，背心含羽絨背心，鞋款含跑鞋、休閒鞋、瑪莉珍鞋和拖鞋。款色是款號加顏色；尺寸是款號、顏色加有下單的尺寸。改黃色數量格後，分頁和大類會跟著重算。'; sum.getCell(r,1).font={...F,color:{argb:'FF6B6B70'}}; sum.getCell(r,1).alignment={wrapText:true,vertical:'top'}; sum.getRow(r).height=48; r+=2;
   sum.getCell(`A${r}`).value='依系列'; sum.getCell(`A${r}`).font={...F,bold:true,size:12}; r++;
   paintHead(r,['系列','款色數','尺寸數','訂購總數','零售金額 TWD']); r++;
   const seriesAmt=new Map();
